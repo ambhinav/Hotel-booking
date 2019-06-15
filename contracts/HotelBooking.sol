@@ -1,23 +1,43 @@
 pragma solidity >=0.4.22 <0.7.0;
 
-contract Purchase {
-    uint public value;
-    address payable public seller;
-    address payable public buyer;
-    enum State { Created, Locked, Inactive }
-    State public state;
+contract BookHotel {
 
-    // Ensure that `msg.value` is an even number.
-    // Division will truncate if it is an odd number.
-    // Check via multiplication that it wasn't an odd number.
-    constructor() public payable {
-        seller = msg.sender;
-        value = msg.value / 2;
-        require((2 * value) == msg.value, "Value has to be even.");
+    enum BookStatus { Created, Locked, Inactive }
+
+    struct Booking {
+        uint bookId;
+        uint price;
+        uint startDate;
+        uint endDate;
+        BookStatus status;
+        address payable owner;
+        address payable buyer;
+    }
+
+    uint256 public numHotels = 0;
+    mapping(uint256 => Booking) public hotels;
+
+    constructor() public {}
+
+    function addBooking(
+        uint price,
+        uint startDate,
+        uint endDate
+    ) public payable returns(uint bookId) {
+        require(msg.value > 0.1 ether, "You need at least 0.1 ETH to get a car");
+        bookId = ++numHotels;
+        Booking memory newBook = Booking(
+            price,
+            startDate,
+            endDate,
+            BookStatus.Created,
+            msg.sender
+        );
+        BookHotel[bookId] = newBook;
     }
 
     modifier condition(bool _condition) {
-        require(_condition);
+        require(_condition, "ok");
         _;
     }
 
@@ -29,15 +49,15 @@ contract Purchase {
         _;
     }
 
-    modifier onlySeller() {
+    modifier onlyOwner() {
         require(
-            msg.sender == seller,
+            msg.sender == owner,
             "Only seller can call this."
         );
         _;
     }
 
-    modifier inState(State _state) {
+    modifier inState(BookStatus _state) {
         require(
             state == _state,
             "Invalid state."
@@ -50,50 +70,51 @@ contract Purchase {
     event ItemReceived();
 
     /// Abort the purchase and reclaim the ether.
-    /// Can only be called by the seller before
+    /// Can only be called by the owner before
     /// the contract is locked.
     function abort()
         public
-        onlySeller
-        inState(State.Created)
+        onlyOwner
+        inState(BookStatus.created)
     {
         emit Aborted();
         state = State.Inactive;
-        seller.transfer(address(this).balance);
+        owner.transfer(address(this).balance);
     }
 
     /// Confirm the purchase as buyer.
-    /// Transaction has to include `2 * value` ether.
+    /// Transaction has to include `value` ether.
     /// The ether will be locked until confirmReceived
     /// is called.
-    function confirmPurchase()
+    function checkIn(uint _bookId)
         public
-        inState(State.Created)
-        condition(msg.value == (2 * value))
+        inState(BookStatus.created)
+        condition(_bookId == ) //verify on check in that booking ID is correct
         payable
     {
         emit PurchaseConfirmed();
-        buyer = msg.sender;
+        buyer = msg.sender; //only buyer can confirm purchase
         state = State.Locked;
     }
 
     /// Confirm that you (the buyer) received the item.
     /// This will release the locked ether.
-    function confirmReceived()
+    function checkOut(uint _bookId)
         public
         onlyBuyer
-        inState(State.Locked)
+        inState(BookStatus.Locked)
+        condition(_bookId == bookId)
     {
         emit ItemReceived();
         // It is important to change the state first because
         // otherwise, the contracts called using `send` below
         // can call in again here.
-        state = State.Inactive;
+        BookStatus.inactive
 
         // NOTE: This actually allows both the buyer and the seller to
         // block the refund - the withdraw pattern should be used.
 
-        buyer.transfer(value);
-        seller.transfer(address(this).balance);
+        buyer.transfer(price);
+        owner.transfer(address(this).balance);
     }
 }
